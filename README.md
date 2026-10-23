@@ -1,112 +1,148 @@
-﻿# Turkish Sign Language Recognition
+﻿<div align="center">
 
-## Project Overview
+# 🤟 Turkish Sign Language Recognition
 
-This repository implements a sign-language recognition system for Turkish Sign Language (TSL). The project contains code for dataset handling, training a detection/recognition model, running realtime inference, and utilities for preparing and evaluating data. The model checkpoints and example dataset organization are included to help reproduce results or continue research.
+**Real-time recognition of 28 Turkish Sign Language (TİD) words from a webcam, a REST API or a phone.**
 
-## Key Components
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.x-EE4C2C?logo=pytorch&logoColor=white)
+![YOLOv8](https://img.shields.io/badge/Ultralytics-YOLOv8s-111F68)
+![OpenCV](https://img.shields.io/badge/OpenCV-realtime-5C3EE8?logo=opencv&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-API-000000?logo=flask&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)
+![Flutter](https://img.shields.io/badge/Flutter-mobile-02569B?logo=flutter&logoColor=white)
 
-- `SignDETR_Colab_Complete.py` — Main training/experiment script (colab-friendly entrypoint).
-- `test.py` — Scripts for running tests / offline inference.
-- `realtime.py` — Realtime inference / demo script to run the model on a webcam or live feed.
-- `src/` — Core source code: dataset loaders, loss functions, training loop and helpers.
-- `utils/` — Utility scripts for data collection, logging, and evaluation helpers.
-- `checkpoints/` — Saved model weights. Example: `best.pt` (highest validation performance snapshot).
-- `data/` — Example dataset layout (train / test split with `images/` and `labels/`).
+<img src="images/detection_example.jpg" alt="Detection example" width="600">
 
-## Repository Structure
+</div>
 
-- README.md — this file
-- SignDETR_Colab_Complete.py — training/experiment orchestration
-- config.json — configuration used by training scripts
-- src/ — implementation modules (`data.py`, `loss.py`, `realtime.py`, `test.py`)
-- utils/ — helper scripts (`boxes.py`, `collect_images.py`, etc.)
-- checkpoints/ — model weights
-- data/ — example dataset (organized by `train` and `test`, each with `images/` and `labels/`)
+---
 
-## Dataset Format
+## ✨ Highlights
 
-Place your dataset under the `data/` directory with the following recommended structure:
+- **28 TİD signs** detected with a fine-tuned **YOLOv8s** object detector
+- **Real-time webcam demo** with temporal smoothing, so a prediction only appears once it is stable over several frames
+- **Per-class confidence rules** that cut down on confusions between similar hand shapes (e.g. *baklava* vs *parmak*)
+- **Flask REST API** (`/predict`) that takes a base64 frame and returns the recognized word
+- **Docker image** ready to deploy to any cloud provider
+- **Flutter test app** (`test_app/`) for running the pipeline on mobile
+
+## 🧠 How it works
+
+```
+ camera frame ─► YOLOv8s detector ─► per-class confidence filter ─► 10-frame history ─► majority vote ─► word
+```
+
+1. Every frame goes through the detector (`imgsz=640`).
+2. Detections are filtered with class-specific thresholds: strict for easily confused signs, relaxed for hard-to-see ones.
+3. The best detection is pushed into a sliding window of the last 10 frames.
+4. A word is shown only when it wins **at least 6 of the 10** frames. This removes flicker and false positives.
+
+## 🔤 Vocabulary
+
+| | | | | | | |
+|---|---|---|---|---|---|---|
+| ada | aferin | baklava | bana | evlenmek | ezan | fizik |
+| fıstık | geyik | inek | japonya | jilet | lazım | nabız |
+| namaz | omuz | oy | parmak | radyo | sabır | saç |
+| taksi | veda | öpmek | üye | üçgen | ırmak | şık |
+
+## 🚀 Quickstart
+
+```bash
+git clone https://github.com/yusuuferkan/TurkishSignLanguage_DETR.git
+cd TurkishSignLanguage_DETR
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### Live webcam demo
+
+```bash
+python src/realtime.py
+```
+
+> Set `CAMERA_ID` at the top of `src/realtime.py` (`0` = built-in camera, `1` = USB camera).
+
+### Evaluate on test images
+
+```bash
+python src/test.py
+```
+
+### REST API
+
+```bash
+python server.py            # listens on $PORT (default 5000)
+```
+
+```bash
+curl -X POST http://localhost:5000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"image": "data:image/jpeg;base64,<BASE64_FRAME>"}'
+# → {"success": true, "prediction": "taksi"}
+```
+
+### Docker
+
+```bash
+docker build -t tsl-api .
+docker run -p 5000:5000 tsl-api
+```
+
+## 🏋️ Training
+
+Training is done on Google Colab with `SignDETR_Colab_Complete.py`:
+
+1. Zip your dataset as `data.zip` with the layout below and upload it to Colab.
+2. Run the script. It unzips the data, writes `data.yaml` and trains YOLOv8s.
 
 ```
 data/
-	train/
-		images/
-		labels/
-	test/
-		images/
-		labels/
+├── train/
+│   ├── images/
+│   └── labels/      # YOLO-format .txt files
+└── test/
+    ├── images/
+    └── labels/
 ```
 
-Label files are plain text files in the `labels/` folders paired with images in `images/`. The training scripts expect the same label format used in the repository (see `src/data.py` for exact parsing rules). If you have a custom annotation format, adapt `src/data.py` or the dataset loader before training.
+| Setting | Value |
+|---|---|
+| Base model | `yolov8s.pt` |
+| Image size | 640 |
+| Epochs / patience | 100 / 30 |
+| Optimizer | AdamW, `lr0=0.001` |
+| Augmentation | mosaic 1.0, mixup 0.1, ±15° rotation, horizontal flip |
 
-## Requirements
+The best weights are saved to `checkpoints/best.pt` (already included in the repo).
 
-Install the usual Python machine-learning stack. Example (create a virtualenv first):
-
-```bash
-python -m venv venv
-venv\Scripts\activate
-pip install -U pip
-pip install torch torchvision opencv-python numpy matplotlib pyyaml tqdm
-```
-
-Note: Exact versions of `torch` and other libraries depend on your CUDA / platform. If you use CPU-only, install the CPU variants of `torch`.
-
-## Quickstart — Training
-
-1. Prepare dataset under `data/` as described above.
-2. Review and edit `config.json` to set model, training, and dataset hyperparameters.
-3. Start training (example):
-
-```bash
-python SignDETR_Colab_Complete.py --config config.json
-```
-
-The script will read the dataset and configuration, train the model, and save checkpoints in `checkpoints/`.
-
-## Quickstart — Evaluation & Inference
-
-- To run offline evaluation or inference on images, use `test.py` (inspect the script for CLI options):
-
-```bash
-python test.py --weights checkpoints/best.pt --data data/test
-```
-
-- For realtime webcam inference, run:
-
-```bash
-python realtime.py --weights checkpoints/best.pt
-```
-
-Adjust flags and arguments by opening each script header or `config.json`.
-
-## Example
-
-![Evlenmek İşareti](images/3757bcda-evlenmek-2496e67d-d5fb-11f0-8ef8-f8b54d69582e.jpg)
+## 📁 Project structure
 
 ```
+├── SignDETR_Colab_Complete.py   # Colab training script
+├── server.py                    # Flask inference API
+├── Dockerfile
+├── checkpoints/best.pt          # trained weights
+├── src/
+│   ├── realtime.py              # webcam demo
+│   ├── test.py                  # offline evaluation & visualization
+│   ├── check_wrong_labels.py    # dataset sanity checks
+│   ├── config.json              # class names & colors
+│   └── utils/                   # image collection, box helpers, logging
+└── test_app/                    # Flutter mobile test app
+```
 
-## Tips & Notes
+> **Note:** despite "DETR" in the repository name, the current model is a YOLOv8s detector.
 
-- If you see mismatched label parsing errors, open `src/data.py` to confirm the expected label format and adapt your annotations accordingly.
-- Use smaller batch sizes if you run out of GPU memory.
-- The repository contains helper scripts in `utils/` for collecting images, visualizing predictions, and logging progress.
+## 🤝 Contributing
 
-## Checkpoints
+Issues and pull requests are welcome, especially more signs and more training data.
 
-Pretrained or example weights are stored in `checkpoints/` (example: `best.pt`). Use these for quick evaluation or as initialization for fine-tuning.
+---
 
-## Contributing
+<div align="center">
 
-Contributions, bug reports, and improvements are welcome. Open an issue or submit a pull request with brief description and reproduction steps.
+Made by **[Yusuf Erkan](https://www.linkedin.com/in/yusuferkan1/)** · If you find this useful, consider giving it a ⭐
 
-## License & Contact
-
-This repository does not include an explicit license file. If you plan to reuse or redistribute the code, please add a `LICENSE` file or contact the repository owner for permission and licensing details.
-
-For questions, reach out in the repository issues or contact the author listed in project metadata.
-
-
-
-
+</div>
